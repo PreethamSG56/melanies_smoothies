@@ -1,53 +1,70 @@
 # Import python packages
 import streamlit as st
-from snowflake.snowpark.context import get_active_session
 from snowflake.snowpark.functions import col
+import requests
+import pandas as pd
+
+# Connect to Snowflake
+cnx = st.connection("snowflake")
+session = cnx.session()
 
 # Write directly to the app
-st.title(f"Customize the Smoothie {st.__version__}")
-st.write(
-    """
-    Select fruit and customize your smoothie.
-    """
-)
+st.title("🥤 Customize Your Smoothie! 🥤")
+st.write("Customize your Smoothie!")
 
-# Input for smoothie name
-name_on_order = st.text_input("Name of Smoothie:")
-st.write("The name of your smoothie will be:", name_on_order)
+# Name input
+name_on_order = st.text_input("Name on Smoothie:")
+st.write("The name on your Smoothie will be", name_on_order)
 
-# Get active Snowflake session
-session = get_active_session()
+# Get fruit options from Snowflake (with FRUIT_NAME + SEARCH_ON)
+my_dataframe = session.table("smoothies.public.fruit_options").select(col("FRUIT_NAME"), col("SEARCH_ON"))
+pd_df = my_dataframe.to_pandas()
 
-# Load available fruit options
-my_dataframe = session.table("smoothies.public.fruit_options").select(col("FRUIT_NAME"))
-st.dataframe(data=my_dataframe, use_container_width=True)
-
-# Multiselect for ingredients with max 5 selections
+# Multiselect for ingredients
 ingredients_list = st.multiselect(
-    "Choose up to 5 ingredients:",
-    my_dataframe,
-    max_selections=5
+    'Choose up to 5 ingredients:',
+    pd_df['FRUIT_NAME'],
+    max_selections=5    
 )
+
+# Only proceed if user picked something
+# if ingredients_list:
+#     ingredients_string = ", ".join(ingredients_list)
+#     st.write("Ingredients chosen:", ingredients_string)
+
+#     # Show nutrition only for valid fruits
+#     for fruit_chosen in ingredients_list:
+#         search_on = pd_df.loc[pd_df['FRUIT_NAME'] == fruit_chosen, 'SEARCH_ON'].iloc[0]
+
+#         st.subheader(f"{fruit_chosen} Nutrition Information")
+
+#         if search_on == "N/A":
+#             st.info(f"{fruit_chosen} added to your smoothie! ✅ (No nutrition data available)")
+#         else:
+#             response = requests.get(f"https://my.smoothiefroot.com/api/fruit/{search_on}")
+#             if response.status_code == 200:
+#                 st.dataframe(response.json(), use_container_width=True)
+#             else:
+#                 st.warning(f"Sorry, no data found for {fruit_chosen}")
 
 if ingredients_list:
-    # Build a string of chosen ingredients
-    ingredients_string = " ".join(ingredients_list)
+    ingredients_string = ''
+    for fruit_chosen in ingredients_list:
+        ingredients_string += fruit_chosen + ' '
 
-    # ✅ Corrected insert statement with both columns
-    sql_insert = f"""
-        INSERT INTO smoothies.public.orders (ingredients, name_on_order)
-        VALUES ('{ingredients_string}', '{name_on_order}')
-    """
+        search_on = pd_df.loc[pd_df['FRUIT_NAME'] == fruit_chosen, 'SEARCH_ON'].iloc[0]
+       
+        st.subheader(fruit_chosen + ' Nutrition Information')
+        fruityvice_response = requests.get("https://fruityvice.com/api/fruit/" + search_on)
+        fv_df = st.dataframe(data=fruityvice_response.json(), use_container_width=True)
 
-    # 👀 Show the SQL for debugging
-    st.write(sql_insert)
-
-    # Button to run the insert
-    time_to_insert = st.button("Submit Order")
-
-    if time_to_insert:
-        session.sql(sql_insert).collect()
-        st.success(
-            f"Your Smoothie is ordered, {name_on_order}! 🥤",
-            icon="✅"
-        )
+    # Add a Submit button
+    if st.button("Submit Order"):
+        my_insert_stmt = """
+        INSERT INTO smoothies.public.orders(ingredients, name_on_order)
+        VALUES (?, ?)
+        """
+        session.sql(my_insert_stmt, (ingredients_string, name_on_order)).collect()
+   
+   
+        st.success('Your Smoothie is ordered! ✅')
