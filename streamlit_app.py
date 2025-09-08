@@ -47,6 +47,10 @@ ingredients_list = st.multiselect(
 #             else:
 #                 st.warning(f"Sorry, no data found for {fruit_chosen}")
 
+
+
+
+
 if ingredients_list:
     ingredients_string = ''
     for fruit_chosen in ingredients_list:
@@ -68,3 +72,10 @@ if ingredients_list:
    
    
         st.success('Your Smoothie is ordered! ✅')
+
+
+
+
+import requests
+smoothiefroot_response = requests.get("https://my.smoothiefroot.com/api/fruit/watermelon")
+st.text(smoothiefroot_response)
